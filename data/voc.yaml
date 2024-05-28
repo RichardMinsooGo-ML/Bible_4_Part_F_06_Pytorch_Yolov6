@@ -1,7 +1,7 @@
 # Please insure that your custom_dataset are put in same parent dir with YOLOv6_DIR
-train: VOCdevkit/voc_07_12/images/train # train images
-val: VOCdevkit/voc_07_12/images/val # val images
-test: VOCdevkit/voc_07_12/images/val # test images (optional)
+train: /content/data/VOCdevkit/voc_07_12/images/train # train images
+val:   /content/data/VOCdevkit/voc_07_12/images/val # val images
+test:  /content/data/VOCdevkit/voc_07_12/images/val # test images (optional)
 
 # whether it is coco dataset, only coco dataset should be set to True.
 is_coco: False
