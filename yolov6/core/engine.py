@@ -37,25 +37,25 @@ from yolov6.utils.general import download_ckpt
 
 class Trainer:
     def __init__(self, args, cfg, device):
-        self.args = args
-        self.cfg = cfg
-        self.device = device
+        self.args      = args
+        self.cfg       = cfg
+        self.device    = device
         self.max_epoch = args.epochs
 
         if args.resume:
             self.ckpt = torch.load(args.resume, map_location='cpu')
 
-        self.rank = args.rank
-        self.local_rank = args.local_rank
-        self.world_size = args.world_size
+        self.rank         = args.rank
+        self.local_rank   = args.local_rank
+        self.world_size   = args.world_size
         self.main_process = self.rank in [-1, 0]
-        self.save_dir = args.save_dir
+        self.save_dir     = args.save_dir
         # get data loader
-        self.data_dict = load_yaml(args.data_path)
-        self.num_classes = self.data_dict['nc']
+        self.data_dict    = load_yaml(args.data_path)
+        self.num_classes  = self.data_dict['nc']
         # get model and optimizer
         self.distill_ns = True if self.args.distill and self.cfg.model.type in ['YOLOv6n','YOLOv6s'] else False
-        model = self.get_model(args, cfg, self.num_classes, device)
+        model           = self.get_model(args, cfg, self.num_classes, device)
         if self.args.distill:
             if self.args.fuse_ab:
                 LOGGER.error('ERROR in: Distill models should turn off the fuse_ab.\n')
@@ -71,9 +71,11 @@ class Trainer:
             self.optimizer = self.get_optimizer(args, cfg, model)
         self.scheduler, self.lf = self.get_lr_scheduler(args, cfg, self.optimizer)
         self.ema = ModelEMA(model) if self.main_process else None
+        
         # tensorboard
         self.tblogger = SummaryWriter(self.save_dir) if self.main_process else None
         self.start_epoch = 0
+        
         #resume
         if hasattr(self, "ckpt"):
             resume_state_dict = self.ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
@@ -93,17 +95,18 @@ class Trainer:
         self.model = self.parallel_model(args, model, device)
         self.model.nc, self.model.names = self.data_dict['nc'], self.data_dict['names']
 
-        self.max_stepnum = len(self.train_loader)
-        self.batch_size = args.batch_size
-        self.img_size = args.img_size
-        self.rect = args.rect
-        self.vis_imgs_list = []
+        self.max_stepnum    = len(self.train_loader)
+        self.batch_size     = args.batch_size
+        self.img_size       = args.img_size
+        self.rect           = args.rect
+        self.vis_imgs_list  = []
         self.write_trainbatch_tb = args.write_trainbatch_tb
+        
         # set color for classnames
-        self.color = [tuple(np.random.choice(range(256), size=3)) for _ in range(self.model.nc)]
+        self.color          = [tuple(np.random.choice(range(256), size=3)) for _ in range(self.model.nc)]
         self.specific_shape = args.specific_shape
-        self.height = args.height
-        self.width = args.width
+        self.height         = args.height
+        self.width          = args.width
 
         self.loss_num = 3
         self.loss_info = ['Epoch', 'lr', 'iou_loss', 'dfl_loss', 'cls_loss']
@@ -141,6 +144,7 @@ class Trainer:
     # Training one batch data.
     def train_in_steps(self, epoch_num, step_num):
         images, targets = self.prepro_data(self.batch_data, self.device)
+        
         # plot train_batch and save to tensorboard once an epoch
         if self.write_trainbatch_tb and self.main_process and self.step == 0:
             self.plot_train_batch(images, targets)
@@ -150,6 +154,7 @@ class Trainer:
         with amp.autocast(enabled=self.device != 'cpu'):
             _, _, batch_height, batch_width = images.shape
             preds, s_featmaps = self.model(images)
+            
             if self.args.distill:
                 with torch.no_grad():
                     t_preds, t_featmaps = self.teacher_model(images)
@@ -222,16 +227,16 @@ class Trainer:
     def eval_model(self):
         if not hasattr(self.cfg, "eval_params"):
             results, vis_outputs, vis_paths = eval.run(self.data_dict,
-                            batch_size=self.batch_size // self.world_size * 2,
-                            img_size=self.img_size,
-                            model=self.ema.ema if self.args.calib is False else self.model,
-                            conf_thres=0.03,
-                            dataloader=self.val_loader,
-                            save_dir=self.save_dir,
-                            task='train',
-                            specific_shape=self.specific_shape,
-                            height=self.height,
-                            width=self.width
+                            batch_size      = self.batch_size // self.world_size * 2,
+                            img_size        = self.img_size,
+                            model           = self.ema.ema if self.args.calib is False else self.model,
+                            conf_thres      = 0.03,
+                            dataloader      = self.val_loader,
+                            save_dir        = self.save_dir,
+                            task            = 'train',
+                            specific_shape  = self.specific_shape,
+                            height          = self.height,
+                            width           = self.width
                             )
         else:
             def get_cfg_value(cfg_dict, value_str, default_value):
@@ -244,23 +249,23 @@ class Trainer:
                     return default_value
             eval_img_size = get_cfg_value(self.cfg.eval_params, "img_size", self.img_size)
             results, vis_outputs, vis_paths = eval.run(self.data_dict,
-                            batch_size=get_cfg_value(self.cfg.eval_params, "batch_size", self.batch_size // self.world_size * 2),
-                            img_size=eval_img_size,
-                            model=self.ema.ema if self.args.calib is False else self.model,
-                            conf_thres=get_cfg_value(self.cfg.eval_params, "conf_thres", 0.03),
-                            dataloader=self.val_loader,
-                            save_dir=self.save_dir,
-                            task='train',
-                            shrink_size=get_cfg_value(self.cfg.eval_params, "shrink_size", eval_img_size),
-                            infer_on_rect=get_cfg_value(self.cfg.eval_params, "infer_on_rect", False),
-                            verbose=get_cfg_value(self.cfg.eval_params, "verbose", False),
-                            do_coco_metric=get_cfg_value(self.cfg.eval_params, "do_coco_metric", True),
-                            do_pr_metric=get_cfg_value(self.cfg.eval_params, "do_pr_metric", False),
-                            plot_curve=get_cfg_value(self.cfg.eval_params, "plot_curve", False),
-                            plot_confusion_matrix=get_cfg_value(self.cfg.eval_params, "plot_confusion_matrix", False),
-                            specific_shape=self.specific_shape,
-                            height=self.height,
-                            width=self.width
+                            batch_size      = get_cfg_value(self.cfg.eval_params, "batch_size", self.batch_size // self.world_size * 2),
+                            img_size        = eval_img_size,
+                            model           = self.ema.ema if self.args.calib is False else self.model,
+                            conf_thres      = get_cfg_value(self.cfg.eval_params, "conf_thres", 0.03),
+                            dataloader      = self.val_loader,
+                            save_dir        = self.save_dir,
+                            task            = 'train',
+                            shrink_size           = get_cfg_value(self.cfg.eval_params, "shrink_size", eval_img_size),
+                            infer_on_rect         = get_cfg_value(self.cfg.eval_params, "infer_on_rect", False),
+                            verbose               = get_cfg_value(self.cfg.eval_params, "verbose", False),
+                            do_coco_metric        = get_cfg_value(self.cfg.eval_params, "do_coco_metric", True),
+                            do_pr_metric          = get_cfg_value(self.cfg.eval_params, "do_pr_metric", False),
+                            plot_curve            = get_cfg_value(self.cfg.eval_params, "plot_curve", False),
+                            plot_confusion_matrix = get_cfg_value(self.cfg.eval_params, "plot_confusion_matrix", False),
+                            specific_shape        = self.specific_shape,
+                            height                = self.height,
+                            width                 = self.width
                             )
 
         LOGGER.info(f"Epoch: {self.epoch} | mAP@0.5: {results[0]} | mAP@0.50:0.95: {results[1]}")
@@ -287,13 +292,13 @@ class Trainer:
             self.best_stop_strong_aug_ap = self.evaluate_results[1]
 
 
-        self.compute_loss = ComputeLoss(num_classes=self.data_dict['nc'],
-                                        ori_img_size=self.img_size,
-                                        warmup_epoch=self.cfg.model.head.atss_warmup_epoch,
-                                        use_dfl=self.cfg.model.head.use_dfl,
-                                        reg_max=self.cfg.model.head.reg_max,
-                                        iou_type=self.cfg.model.head.iou_type,
-					                    fpn_strides=self.cfg.model.head.strides)
+        self.compute_loss = ComputeLoss(num_classes  = self.data_dict['nc'],
+                                        ori_img_size = self.img_size,
+                                        warmup_epoch = self.cfg.model.head.atss_warmup_epoch,
+                                        use_dfl      = self.cfg.model.head.use_dfl,
+                                        reg_max      = self.cfg.model.head.reg_max,
+                                        iou_type     = self.cfg.model.head.iou_type,
+                                        fpn_strides  = self.cfg.model.head.strides)
 
         if self.args.fuse_ab:
             self.compute_loss_ab = ComputeLoss_ab(num_classes=self.data_dict['nc'],
@@ -326,7 +331,6 @@ class Trainer:
         if self.epoch == self.max_epoch - self.args.stop_aug_last_n_epoch:
             self.cfg.data_aug.mosaic = 0.0
             self.cfg.data_aug.mixup = 0.0
-            self.args.cache_ram = False # disable cache ram when stop strong augmentation.
             self.train_loader, self.val_loader = self.get_data_loader(self.args, self.cfg, self.data_dict)
         self.model.train()
         if self.rank != -1:
@@ -343,7 +347,7 @@ class Trainer:
     def print_details(self):
         if self.main_process:
             self.mean_loss = (self.mean_loss * self.step + self.loss_items) / (self.step + 1)
-            self.pbar.set_description(('%10s' + ' %10.4g' + '%10.4g' * self.loss_num) % (f'{self.epoch}/{self.max_epoch - 1}', \
+            self.pbar.set_description(('%10s' + ' %10.4g' + '%10.4g' * self.loss_num) % (f'{self.epoch+1}/{self.max_epoch}', \
                                                                 self.scheduler.get_last_lr()[0], *(self.mean_loss)))
 
     def strip_model(self):
