@@ -5,10 +5,10 @@
 # train: d:\dataset\coco\images\train2017
 # because windows use "\" as separator, linux use "/" as separator.
 
-train:     /content/data/coco/images/train2017 # 118287 images
-val:       /content/data/coco/images/val2017   # 5000 images
-test:      /content/data/coco/images/test2017
-anno_path: /content/data/coco/annotations/instances_val2017.json
+train:     /content/dataset/coco/images/train2017 # 118287 images
+val:       /content/dataset/coco/images/val2017   # 5000 images
+test:      /content/dataset/coco/images/test2017
+anno_path: /content/dataset/coco/annotations/instances_val2017.json
 
 # number of classes
 nc: 80
